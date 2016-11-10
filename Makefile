@@ -1,2 +1,2 @@
 all:
-  gcc pokehack.c -o pokehack
+	gcc pokehack.c -o pokehack

@@ -6,9 +6,31 @@
 #define CHECKSUM 0xFF6
 #define SAVE_IDX 0xFFC
 
-#define TRAINER_INFO 0
+#define TRAINER_NAME    0x0000
+#define TRAINER_GENDER  0x0008
+#define TRAINER_ID      0x000A
+#define TRAINER_TIME    0x000E
+#define TRAINER_OPTS    0x0013
+#define TRAINER_SKEY    0x00AC
+
+#define TEAM_MONEY 0x0490
+
+#define SECTION_INFO 0
+#define SECTION_TEAM 1
+
 #define GENDER_BOY 0
 #define GENDER_GIRL 1
+
+typedef struct trainer_struct
+{
+  char name[8];
+  char gender;
+	unsigned int pub_id, prv_id;
+	unsigned short hours;
+	unsigned char minutes, seconds, frames;
+	unsigned int seckey;
+}
+trainer;
 
 #define CHUNK_SIZE 4096
 
@@ -46,48 +68,46 @@ void ptoa(char * ascii, unsigned char * poke)
 /*
  * Read a trainer info block
  */
-void readTrainerInfo(FILE * file)
+void readTrainerInfo(char * data, trainer * t)
 {
-	unsigned char namepoke[8];
-	char name[8];
-	char gender;
-	unsigned int trainerid;
-	unsigned short hours;
-	unsigned char minutes, seconds, frames;
-	unsigned int seckey;
+  unsigned int id;
+  
+	ptoa(t->name, data + TRAINER_NAME);
+	t->gender = *(data + TRAINER_GENDER);
+	
+  id = *(unsigned int *)(data + TRAINER_ID);
+	t->pub_id = id & 0xFFFF,
+	t->prv_id = (id >> 16) & 0xFFFF;
+	
+	t->hours   = *(unsigned short *)(data + TRAINER_TIME);
+	t->minutes = *(unsigned char *)(data + TRAINER_TIME + 2);
+	t->seconds = *(unsigned char *)(data + TRAINER_TIME + 3);
+	t->frames  = *(unsigned char *)(data + TRAINER_TIME + 4);
+  
+	t->seckey = *(unsigned int *)(data + TRAINER_SKEY);
+}
 
-	fread(namepoke, sizeof(char), 8, file);
-	// namepoke[7] = 0xFF;
-	ptoa(name, namepoke);
-
-	fread(&gender, sizeof(char), 1, file);
-
-	fseek(file, 1, SEEK_CUR);
-	fread(&trainerid, sizeof(unsigned int), 1, file);
-
-	fread(&hours, sizeof(unsigned short), 1, file);
-	fread(&minutes, sizeof(unsigned char), 1, file);
-	fread(&seconds, sizeof(unsigned char), 1, file);
-	fread(&frames, sizeof(unsigned char), 1, file);
-
-	fseek(file, 3, SEEK_CUR); // options
-  fseek(file, 0x8C, SEEK_CUR); // game code
-	fread(&seckey, sizeof(unsigned int), 1, file);
-  	
-
-  printf("Trainer: %s ", name);
-	if (gender && GENDER_GIRL)
+/*
+ * Print trainer info.
+ */
+void printTrainerInfo(trainer * t)
+{
+  printf("Trainer: %s ", t->name);
+	if (t->gender && GENDER_GIRL)
 		printf("is a girl\n");
 	else
 		printf("is a boy\n");
+	printf("Public ID: %04x Secret ID: %04x\n", t->pub_id, t->prv_id);
+	printf("You have played: %02d:%02d:%02d\n", t->hours, t->minutes, t->seconds);
+	printf("Security key: %08X\n", t->seckey);
+}
 
-	printf("Public ID: %04x Secret ID: %04x\n",
-			trainerid & 0xFFFF,
-			(trainerid >> 16) & 0xFFFF);
+void readTeam(char * data, trainer * t)
+{
 
-	printf("You have played: %02d:%02d:%02d\n", hours, minutes, seconds);
-
-	printf("Security key: %08X\n", seckey);
+	unsigned int money = *(unsigned int *)(data + TEAM_MONEY);
+	money = money ^ t->seckey;
+	printf("Moneys: %d\n", money);
 }
 
 /*
@@ -110,30 +130,23 @@ void readSave(FILE * file, int saveOffset)
   short secid;
 	short chksum;
 	int save_index;
+	trainer t;
 
 	chunk * chunks = (chunk *)malloc(sizeof(chunk) * 14);
 
 	for (i = 0; i < 14; i++)
 	{
-		// fseek(file, saveOffset + i * 0x1000, SEEK_SET);
 		fseek(file, saveOffset + i * 0x1000 + SECTION_ID, SEEK_SET);
 		readFooter(file, &secid, &chksum, &save_index);
-
-		printf("%02d %04hX %08x\n", secid, chksum, save_index);
-
-		switch (secid)
-		{
-			case TRAINER_INFO:
-		  	fseek(file, saveOffset + i * 0x1000, SEEK_SET);
-				readTrainerInfo(file);
-				break;
-		}
-
+		
 		fseek(file, saveOffset + i * 0x1000, SEEK_SET);
 		fread(chunks[secid].data, sizeof(unsigned char), CHUNK_SIZE, file);
 	}
 
-	// readTrainerInfo(chunk[TRAINER_INFO].data);
+	readTrainerInfo(chunks[SECTION_INFO].data, &t);
+	printTrainerInfo(&t);
+	
+	readTeam(chunks[SECTION_TEAM].data, &t);
 
 	free(chunks);
 }
