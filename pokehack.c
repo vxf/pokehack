@@ -13,7 +13,10 @@
 #define TRAINER_OPTS    0x0013
 #define TRAINER_SKEY    0x00AC
 
+#define TEAM_SIZE 0x0234
+#define TEAM_LIST 0x0238
 #define TEAM_MONEY 0x0490
+#define TEAM_COINS 0x0494
 
 #define SECTION_INFO 0
 #define SECTION_TEAM 1
@@ -80,9 +83,9 @@ void readTrainerInfo(char * data, trainer * t)
 	t->prv_id = (id >> 16) & 0xFFFF;
 	
 	t->hours   = *(unsigned short *)(data + TRAINER_TIME);
-	t->minutes = *(unsigned char *)(data + TRAINER_TIME + 2);
-	t->seconds = *(unsigned char *)(data + TRAINER_TIME + 3);
-	t->frames  = *(unsigned char *)(data + TRAINER_TIME + 4);
+	t->minutes = *(data + TRAINER_TIME + 2);
+	t->seconds = *(data + TRAINER_TIME + 3);
+	t->frames  = *(data + TRAINER_TIME + 4);
   
 	t->seckey = *(unsigned int *)(data + TRAINER_SKEY);
 }
@@ -102,10 +105,31 @@ void printTrainerInfo(trainer * t)
 	printf("Security key: %08X\n", t->seckey);
 }
 
+void readPokemon(char * data)
+{
+  char name[11];
+  char level;
+
+  ptoa(name, data + 8);
+	level  = *(data + 84);
+	
+  printf("%s lvl: %d\n", name, level);
+}
+
 void readTeam(char * data, trainer * t)
 {
-
-	unsigned int money = *(unsigned int *)(data + TEAM_MONEY);
+  int i;
+  unsigned int money;
+  
+	unsigned int size = *(unsigned int *)(data + TEAM_SIZE);
+	printf("Size: %d\n", size);
+	
+	for (i = 0; i < size; i++)
+	{
+	  readPokemon(data + TEAM_LIST + i*100);
+	}
+	
+  money = *(unsigned int *)(data + TEAM_MONEY);
 	money = money ^ t->seckey;
 	printf("Moneys: %d\n", money);
 }
@@ -143,6 +167,7 @@ void readSave(FILE * file, int saveOffset)
 		fread(chunks[secid].data, sizeof(unsigned char), CHUNK_SIZE, file);
 	}
 
+  printf("Save Index: %08x\n", save_index);
 	readTrainerInfo(chunks[SECTION_INFO].data, &t);
 	printTrainerInfo(&t);
 	
@@ -164,6 +189,7 @@ int main(int argc, char * argv[])
 	file = fopen(argv[1], "rb");
 
 	readSave(file, 0);
+	printf("\n");
 	readSave(file, 0x00E000);
 
 	fclose(file);
